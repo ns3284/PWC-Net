@@ -5,7 +5,7 @@ import numpy as np
 from math import ceil
 from torch.autograd import Variable
 from scipy.ndimage import imread
-import models
+from networks.PWCNet import pwc_dc_net
 """
 Contact: Deqing Sun (deqings@nvidia.com) Zhile Ren (jrenzhile@gmail.com)
 """
@@ -64,7 +64,7 @@ for _i, _inputs in enumerate(im_all):
     
 im_all = torch.autograd.Variable(torch.cat(im_all,1).cuda())
 
-net = models.pwc_dc_net(pwc_model_fn)
+net = pwc_dc_net(pwc_model_fn)
 net = net.cuda()
 net.eval()
 
