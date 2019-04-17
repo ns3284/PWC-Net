@@ -219,14 +219,40 @@ if __name__ == '__main__':
         block.log("Resume: " + str(args.resume))
         block.log("Is File: " + str(os.path.isfile(args.resume)))
         
+#        if args.resume and os.path.isfile(args.resume):
+#            block.log("Loading checkpoint '{}'".format(args.resume))
+#            checkpoint = torch.load(args.resume)
+#            if not args.inference:
+#                args.start_epoch = checkpoint['epoch']
+#            best_err = checkpoint['best_EPE']
+#            model_and_loss.module.model.load_state_dict(checkpoint['state_dict'])
+#            block.log("Loaded checkpoint '{}' (at epoch {})".format(args.resume, checkpoint['epoch']))
+
         if args.resume and os.path.isfile(args.resume):
             block.log("Loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            if not args.inference:
-                args.start_epoch = checkpoint['epoch']
-            best_err = checkpoint['best_EPE']
-            model_and_loss.module.model.load_state_dict(checkpoint['state_dict'])
-            block.log("Loaded checkpoint '{}' (at epoch {})".format(args.resume, checkpoint['epoch']))
+            if 'epoch' in checkpoint.keys():
+                block.log("Loaded checkpoint '{}' (at epoch {})".format(args.resume, checkpoint['epoch']))
+                if not args.inference:
+                    args.start_epoch = checkpoint['epoch']
+            if 'best_EPE' in checkpoint.keys():
+                best_err = checkpoint['best_EPE']
+            if 'state_dict' in checkpoint.keys():
+                print('got here')
+                model_and_loss.module.model.load_state_dict(checkpoint['state_dict'])
+            else:
+                model_dict = model_and_loss.module.model.state_dict()
+                pretrained_dict = {k:v for k,v in checkpoint.items() if k in model_dict}
+                model_dict.update(pretrained_dict)
+                model_and_loss.module.model.load_state_dict(model_dict)
+                count = 0
+                for p in model_and_loss.parameters():
+                    count+=1
+                    if count <= 126:
+                        p.requires_grad = False
+                #print("this is count", count)
+                for p in model_and_loss.parameters():
+                    print(p.requires_grad)
 
         elif args.resume and args.inference:
             block.log("No checkpoint found at '{}'".format(args.resume))
