@@ -41,7 +41,7 @@ class FlowNetSD(nn.Module):
         self.predict_flow5 = predict_flow(512)#, dcn=dcn)
         self.predict_flow4 = predict_flow(256)#, dcn=dcn)
         self.predict_flow3 = predict_flow(128)#, dcn=dcn)
-        self.predict_flow2 = predict_flow(64, dcn=dcn)
+        self.predict_flow2 = predict_flow(64)
 
         self.upsampled_flow6_to_5 = nn.ConvTranspose2d(2, 2, 4, 2, 1)
         self.upsampled_flow5_to_4 = nn.ConvTranspose2d(2, 2, 4, 2, 1)

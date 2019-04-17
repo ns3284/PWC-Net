@@ -13,7 +13,7 @@ class FlowNetFusion(nn.Module):
         super(FlowNetFusion,self).__init__()
 
         self.batchNorm = batchNorm
-        self.conv0   = conv(self.batchNorm,  11,   64)
+        self.conv0   = conv(self.batchNorm,  15,   64)
         self.conv1   = conv(self.batchNorm,  64,   64, stride=2)
         self.conv1_1 = conv(self.batchNorm,  64,   128)
         self.conv2   = conv(self.batchNorm,  128,  128, stride=2)
@@ -27,7 +27,7 @@ class FlowNetFusion(nn.Module):
 
         self.predict_flow2 = predict_flow(128)
         self.predict_flow1 = predict_flow(32)
-        self.predict_flow0 = predict_flow(16, dcn=dcn)
+        self.predict_flow0 = predict_flow(16)
 
         self.upsampled_flow2_to_1 = nn.ConvTranspose2d(2, 2, 4, 2, 1)
         self.upsampled_flow1_to_0 = nn.ConvTranspose2d(2, 2, 4, 2, 1)

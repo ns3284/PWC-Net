@@ -118,7 +118,7 @@ if __name__ == '__main__':
 
         args.cuda = not args.no_cuda and torch.cuda.is_available()
         args.current_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).rstrip()
-        args.log_file = join(args.save, 'args.txt')
+        args.log_file = join(args.save, 'args' + args.notes + '.txt')
 
         # dict to collect activation gradients (for training debug purpose)
         args.grads = {}
@@ -239,8 +239,8 @@ if __name__ == '__main__':
         if not os.path.exists(args.save):
             os.makedirs(args.save)
 
-        train_logger = SummaryWriter(log_dir = os.path.join(args.save, 'train'+str(args.model) if not args.dcn else 'train'+str(args.model)+'dcn'), comment = 'training')
-        validation_logger = SummaryWriter(log_dir = os.path.join(args.save, 'validation'+str(args.model) if not args.dcn else 'validation'+str(args.model)+'dcn'), comment = 'validation')
+        train_logger = SummaryWriter(log_dir = os.path.join(args.save, 'train-'+str(args.model)+'-'+args.notes if not args.dcn else 'train'+str(args.model)+'dcn')+'-'+args.notes, comment = 'training')
+        validation_logger = SummaryWriter(log_dir = os.path.join(args.save, 'validation-'+str(args.model)+'-'+args.notes if not args.dcn else 'validation'+str(args.model)+'dcn')+'-'+args.notes, comment = 'validation')
 
     # Dynamically load the optimizer with parameters passed in via "--optimizer_[param]=[value]" arguments
     with tools.TimerBlock("Initializing {} Optimizer".format(args.optimizer)) as block:
@@ -293,8 +293,10 @@ if __name__ == '__main__':
             loss_values = [v.data.cpu() for v in losses] #collect loss values
 
             # gather loss_labels, direct return leads to recursion limit error as it looks for variables to gather'
-            #loss_labels = [y for x in model.module.loss.loss_labels for y in x] #list(model.module.loss.loss_labels)
-            loss_labels = list(model.module.loss.loss_labels)
+            if args.loss.lower() == "multiscale":
+                loss_labels = [y for x in model.module.loss.loss_labels for y in x] #list(model.module.loss.loss_labels)
+            else:
+                loss_labels = list(model.module.loss.loss_labels)
 
             assert not np.isnan(total_loss.cpu())
 
@@ -455,7 +457,7 @@ if __name__ == '__main__':
                                       'epoch': epoch,
                                       'state_dict': model_and_loss.module.model.state_dict(),
                                       'best_EPE': best_err},
-                                      is_best, args.save, args.model, tag='dcn' if args.dcn else '')
+                                      is_best, args.save, args.model, tag='dcn'+args.notes if args.dcn else args.notes)
             checkpoint_progress.update(1)
             checkpoint_progress.close()
             offset += 1
@@ -476,7 +478,7 @@ if __name__ == '__main__':
                                           'epoch': epoch,
                                           'state_dict': model_and_loss.module.model.state_dict(),
                                           'best_EPE': train_loss},
-                                          False, args.save, args.model, filename = 'train-checkpoint.pth.tar', tag='dcn' if args.dcn else '')
+                                          False, args.save, args.model, filename = 'train-checkpoint.pth.tar', tag='dcn' + args.notes if args.dcn else args.notes)
                 checkpoint_progress.update(1)
                 checkpoint_progress.close()
 

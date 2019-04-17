@@ -137,7 +137,7 @@ def update_hyperparameter_schedule(args, epoch, global_iteration, optimizer):
 
 def save_checkpoint(state, is_best, path, prefix, filename='checkpoint.pth.tar', tag=''):
     prefix_save = os.path.join(path, prefix)
-    name = prefix_save + '_' + filename
+    name = prefix_save + '_' + tag + '_' + filename
     torch.save(state, name)
     if is_best:
         shutil.copyfile(name, prefix_save + '_' + tag +'_model_best.pth.tar')

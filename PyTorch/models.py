@@ -17,6 +17,7 @@ from networks import FlowNetS
 from networks import FlowNetSD
 from networks import FlowNetFusion
 from networks import DFlowNetS
+from networks import PWCNet
 
 #import deform_conv_2d
 from networks.submodules import *
@@ -53,9 +54,9 @@ class PWCDCNet(nn.Module):
         self.conv5a  = conv(batchNorm, 96, 128, kernel_size=3, stride=2)
         self.conv5aa = conv(batchNorm, 128,128, kernel_size=3, stride=1)
         self.conv5b  = conv(batchNorm, 128,128, kernel_size=3, stride=1)
-        self.conv6aa = conv(batchNorm, 128,196, kernel_size=3, stride=2)
-        self.conv6a  = conv(batchNorm, 196,196, kernel_size=3, stride=1)
-        self.conv6b  = conv(batchNorm, 196,196, kernel_size=3, stride=1)
+        self.conv6aa = conv(batchNorm, 128,196, kernel_size=3, stride=2, dcn=args.dcn)
+        self.conv6a  = conv(batchNorm, 196,196, kernel_size=3, stride=1, dcn=args.dcn)
+        self.conv6b  = conv(batchNorm, 196,196, kernel_size=3, stride=1, dcn=args.dcn)
 
         self.corr    = Correlation(pad_size=md, kernel_size=1, max_displacement=md, stride1=1, stride2=1, corr_multiply=1)
         self.leakyRELU = nn.LeakyReLU(0.1)
@@ -64,12 +65,12 @@ class PWCDCNet(nn.Module):
         dd = np.cumsum([128,128,96,64,32])
 
         od = nd
-        self.conv6_0 = conv(batchNorm, od,      128, kernel_size=3, stride=1)
-        self.conv6_1 = conv(batchNorm, od+dd[0],128, kernel_size=3, stride=1)
-        self.conv6_2 = conv(batchNorm, od+dd[1],96,  kernel_size=3, stride=1)
-        self.conv6_3 = conv(batchNorm, od+dd[2],64,  kernel_size=3, stride=1)
-        self.conv6_4 = conv(batchNorm, od+dd[3],32,  kernel_size=3, stride=1)        
-        self.predict_flow6 = predict_flow(od+dd[4])
+        self.conv6_0 = conv(batchNorm, od,      128, kernel_size=3, stride=1, dcn=args.dcn)
+        self.conv6_1 = conv(batchNorm, od+dd[0],128, kernel_size=3, stride=1, dcn=args.dcn)
+        self.conv6_2 = conv(batchNorm, od+dd[1],96,  kernel_size=3, stride=1, dcn=args.dcn)
+        self.conv6_3 = conv(batchNorm, od+dd[2],64,  kernel_size=3, stride=1, dcn=args.dcn)
+        self.conv6_4 = conv(batchNorm, od+dd[3],32,  kernel_size=3, stride=1, dcn=args.dcn)        
+        self.predict_flow6 = predict_flow(od+dd[4], dcn=args.dcn)
         self.deconv6 = deconv(2, 2, kernel_size=4, stride=2, padding=1) 
         self.upfeat6 = deconv(od+dd[4], 2, kernel_size=4, stride=2, padding=1) 
         
@@ -79,7 +80,7 @@ class PWCDCNet(nn.Module):
         self.conv5_2 = conv(batchNorm, od+dd[1],96,  kernel_size=3, stride=1)
         self.conv5_3 = conv(batchNorm, od+dd[2],64,  kernel_size=3, stride=1)
         self.conv5_4 = conv(batchNorm, od+dd[3],32,  kernel_size=3, stride=1)
-        self.predict_flow5 = predict_flow(od+dd[4]) 
+        self.predict_flow5 = predict_flow(od+dd[4], dcn=args.dcn) 
         self.deconv5 = deconv(2, 2, kernel_size=4, stride=2, padding=1) 
         self.upfeat5 = deconv(od+dd[4], 2, kernel_size=4, stride=2, padding=1) 
         
@@ -500,7 +501,7 @@ class FlowNet2(nn.Module):
         self.channelnorm = ChannelNorm()
 
         # First Block (FlowNetC)
-        self.flownetc = FlowNetC.FlowNetC(args, batchNorm=self.batchNorm, dcn=args.dcn)
+        self.flownetc = FlowNetC.FlowNetC(args, batchNorm=self.batchNorm)#, dcn=args.dcn)
         self.upsample1 = nn.Upsample(scale_factor=4, mode='bilinear')
 
         if args.fp16:
@@ -512,7 +513,7 @@ class FlowNet2(nn.Module):
             self.resample1 = Resample2d()
 
         # Block (FlowNetS1)
-        self.flownets_1 = FlowNetS.FlowNetS(args, batchNorm=self.batchNorm, dcn=args.dcn)
+        self.flownets_1 = FlowNetS.FlowNetS(args, batchNorm=self.batchNorm)#, dcn=args.dcn)
         self.upsample2 = nn.Upsample(scale_factor=4, mode='bilinear')
         if args.fp16:
             self.resample2 = nn.Sequential(
@@ -524,12 +525,16 @@ class FlowNet2(nn.Module):
 
 
         # Block (FlowNetS2)
-        self.flownets_2 = FlowNetS.FlowNetS(args, batchNorm=self.batchNorm, dcn=args.dcn)
+        self.flownets_2 = FlowNetS.FlowNetS(args, batchNorm=self.batchNorm)#, dcn=args.dcn)
 
         # Block (FlowNetSD)
-        self.flownets_d = FlowNetSD.FlowNetSD(args, batchNorm=self.batchNorm, dcn=args.dcn)
+        self.flownets_d = FlowNetSD.FlowNetSD(args, batchNorm=self.batchNorm)#, dcn=args.dcn)
+        self.flownet_pwc = PWCNet.PWCDCNet(args, batchNorm=self.batchNorm, dcn=args.dcn)
+
+        #Block (PWCNet)
         self.upsample3 = nn.Upsample(scale_factor=4, mode='nearest')
         self.upsample4 = nn.Upsample(scale_factor=4, mode='nearest')
+        self.upsample5 = nn.Upsample(scale_factor=4, mode='nearest')
 
         if args.fp16:
             self.resample3 = nn.Sequential(
@@ -547,8 +552,16 @@ class FlowNet2(nn.Module):
         else:
             self.resample4 = Resample2d()
 
+        if args.fp16:
+            self.resample5 = nn.Sequential(
+                            tofp32(),
+                            Resample2d(),
+                            tofp16())
+        else:
+            self.resample5 = Resample2d()
+
         # Block (FLowNetFusion)
-        self.flownetfusion = FlowNetFusion.FlowNetFusion(args, batchNorm=self.batchNorm, dcn=args.dcn)
+        self.flownetfusion = FlowNetFusion.FlowNetFusion(args, batchNorm=self.batchNorm)#, dcn=args.dcn)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -636,8 +649,16 @@ class FlowNet2(nn.Module):
         # if not diff_flownetsd_img1.volatile:
         #     diff_flownetsd_img1.register_hook(save_grad(self.args.grads, 'diff_flownetsd_img1'))
 
+        flownetpwc_flow2 = self.flownet_pwc(x)[0]
+        flownetpwc_flow = self.upsample5(flownetpwc_flow2 / self.div_flow)
+        norm_flownetpwc_flow = self.channelnorm(flownetpwc_flow)
+
+        diff_flownetpwc_flow = self.resample5(x[:,3:,:,:], flownetpwc_flow)
+        diff_flownetpwc_img1 = self.channelnorm((x[:,:3,:,:]-diff_flownetpwc_flow))
+
+#        print(x[:,:3,:,:].shape, flownetsd_flow.shape, flownets2_flow.shape, norm_flownetsd_flow.shape, norm_flownets2_flow.shape, diff_flownetsd_img1.shape, diff_flownets2_img1.shape, norm_diff_img0.shape)
         # concat img1 flownetsd, flownets2, norm_flownetsd, norm_flownets2, diff_flownetsd_img1, diff_flownets2_img1
-        concat3 = torch.cat((x[:,:3,:,:], flownetsd_flow, flownets2_flow, norm_flownetsd_flow, norm_flownets2_flow, diff_flownetsd_img1, diff_flownets2_img1), dim=1)
+        concat3 = torch.cat((x[:,:3,:,:],flownetsd_flow, flownets2_flow, flownetpwc_flow, norm_flownetsd_flow, norm_flownets2_flow, norm_flownetpwc_flow, diff_flownetsd_img1, diff_flownets2_img1, diff_flownetpwc_img1), dim=1)
         flownetfusion_flow = self.flownetfusion(concat3)
 
         # if not flownetfusion_flow.volatile:
