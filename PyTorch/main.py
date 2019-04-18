@@ -67,6 +67,9 @@ if __name__ == '__main__':
     parser.add_argument('--notes', type=str, default='')
     parser.add_argument('--blocktest', action='store_true')
 
+    parser.add_argument('--pwcweights', type=str, default='')
+    parser.add_argument('--freeze', action='store_true')
+
     parser.add_argument('--fp16', action='store_true', help='Run model in pseudo-fp16 mode (fp16 storage fp32 math).')
     parser.add_argument('--fp16_scale', type=float, default=1024., help='Loss scaling, positive power of 2 values can improve fp16 convergence.')
 
@@ -240,19 +243,36 @@ if __name__ == '__main__':
             if 'state_dict' in checkpoint.keys():
                 print('got here')
                 model_and_loss.module.model.load_state_dict(checkpoint['state_dict'])
-            else:
                 model_dict = model_and_loss.module.model.state_dict()
-                pretrained_dict = {k:v for k,v in checkpoint.items() if k in model_dict}
+                pretrained_dict = {k:v for k,v in checkpoint['state_dict'].items() if k in model_dict and 'fusion' not in k}
                 model_dict.update(pretrained_dict)
-                model_and_loss.module.model.load_state_dict(model_dict)
                 count = 0
-                for p in model_and_loss.parameters():
-                    count+=1
-                    if count <= 126:
-                        p.requires_grad = False
-                #print("this is count", count)
-                for p in model_and_loss.parameters():
-                    print(p.requires_grad)
+                if args.pwcweights != '':
+                    checkpoint2 = torch.load(args.pwcweights)
+                    for k in checkpoint2.keys():
+                        if 'flownet_pwc.'+k in model_dict:
+                            model_dict['flownet_pwc.'+k] = checkpoint2[k]
+                            count += 1
+                    block.log("Loaded PWC Weights: " + str(count))
+                model_and_loss.module.model.load_state_dict(model_dict)
+                if args.freeze:
+                    weights = {}
+                    for k in checkpoint['state_dict'].keys():
+                        vals = k.split('.')
+                        l = weights.get(vals[0], list())
+                        weights[vals[0]] = l
+                        weights[vals[0]].append(vals[1])
+                    frozen = ['flownetc', 'flownets_1', 'flownets_2', 'flownets_d']
+                    count = 0
+                    for m in frozen:
+                        obj = eval('model_and_loss.module.model.' + m)
+                        for l in dir(obj):
+                            if l in weights[m]:
+                                for p in eval('model_and_loss.module.model.' + m + '.' + l).parameters():
+                                    p.requires_grad = False
+                                    count += 1
+                    block.log("Frozen Parameters: " + str(count))
+
 
         elif args.resume and args.inference:
             block.log("No checkpoint found at '{}'".format(args.resume))
@@ -265,8 +285,12 @@ if __name__ == '__main__':
         if not os.path.exists(args.save):
             os.makedirs(args.save)
 
-        train_logger = SummaryWriter(log_dir = os.path.join(args.save, 'train-'+str(args.model)+'-'+args.notes if not args.dcn else 'train'+str(args.model)+'dcn')+'-'+args.notes, comment = 'training')
-        validation_logger = SummaryWriter(log_dir = os.path.join(args.save, 'validation-'+str(args.model)+'-'+args.notes if not args.dcn else 'validation'+str(args.model)+'dcn')+'-'+args.notes, comment = 'validation')
+        ######tmp
+        checkpoint = torch.load(args.resume)
+        model_and_loss.module.model.load_state_dict(checkpoint['state_dict'])
+
+        train_logger = SummaryWriter(log_dir = os.path.join(args.save, 'train-'+str(args.model) if not args.dcn else 'train'+str(args.model)+'dcn')+'-'+args.notes, comment = 'training')
+        validation_logger = SummaryWriter(log_dir = os.path.join(args.save, 'validation-'+str(args.model) if not args.dcn else 'validation'+str(args.model)+'dcn')+'-'+args.notes, comment = 'validation')
 
     # Dynamically load the optimizer with parameters passed in via "--optimizer_[param]=[value]" arguments
     with tools.TimerBlock("Initializing {} Optimizer".format(args.optimizer)) as block:
@@ -465,7 +489,7 @@ if __name__ == '__main__':
             stats = inference(args=args, epoch=epoch - 1, data_loader=inference_loader, model=model_and_loss, offset=offset)
             offset += 1
 
-        if not args.skip_validation and ((epoch - 1) % args.validation_frequency) == 0:
+        if not args.skip_validation and ((epoch - 1) % args.validation_frequency) == 0 and (not args.resume or global_iteration > 0):
             validation_loss, _ = train(args=args, epoch=epoch - 1, start_iteration=global_iteration, data_loader=validation_loader, model=model_and_loss, optimizer=optimizer, logger=validation_logger, is_validate=True, offset=offset)
             #print("\n")
             #print("This is validation loss", validation_loss)
